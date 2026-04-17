@@ -1,0 +1,12 @@
+{
+  "name": "flowtrace-collector",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "playwright": "^1.54.2"
+  }
+}

@@ -1,0 +1,10 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Flowtrace Report</title>
+  </head>
+  <body>
+    <!-- Template placeholder. O HTML final do MVP é gerado em src/report/html.rs -->
+  </body>
+</html>
