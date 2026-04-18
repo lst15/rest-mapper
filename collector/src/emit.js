@@ -5,11 +5,18 @@ function nowUnixMs() {
   return Date.now();
 }
 
-function createEmitter({ sessionId, outputPath }) {
+function createEmitter({ sessionId, outputPath, allowedEventTypes }) {
   fs.mkdirSync(require('node:path').dirname(outputPath), { recursive: true });
   const stream = fs.createWriteStream(outputPath, { flags: 'a' });
+  const allowedTypes = Array.isArray(allowedEventTypes) && allowedEventTypes.length > 0
+    ? new Set(allowedEventTypes)
+    : null;
 
   function emitTrace(type, data) {
+    if (allowedTypes && !allowedTypes.has(type)) {
+      return;
+    }
+
     const envelope = {
       id: crypto.randomUUID(),
       ts_unix_ms: nowUnixMs(),

@@ -26,6 +26,11 @@ pub async fn run_record_session(args: RecordArgs) -> Result<()> {
         node_bin: args.node_bin.clone(),
         browser: args.browser.clone(),
         headless: args.headless,
+        event_types: args
+            .event_types
+            .iter()
+            .map(|event_type| event_type.as_event_name().to_string())
+            .collect(),
     };
 
     let mut collector = CollectorProcess::spawn(config).await?;

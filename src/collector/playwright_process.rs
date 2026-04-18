@@ -16,6 +16,7 @@ pub struct CollectorConfig {
     pub node_bin: String,
     pub browser: String,
     pub headless: bool,
+    pub event_types: Vec<String>,
 }
 
 pub struct CollectorProcess {
@@ -36,6 +37,10 @@ impl CollectorProcess {
             .arg(config.url)
             .arg("--browser")
             .arg(config.browser);
+
+        for event_type in &config.event_types {
+            cmd.arg("--event-type").arg(event_type);
+        }
 
         if config.headless {
             cmd.arg("--headless");

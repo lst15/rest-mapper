@@ -9,16 +9,31 @@ const {
   matchInitiatorHint,
 } = require('./instrumentation');
 
+const KNOWN_EVENT_TYPES = new Set([
+  'BrowserOpened',
+  'PageNavigated',
+  'RouteChanged',
+  'UserAction',
+  'NetworkRequest',
+  'NetworkResponse',
+  'ConsoleLog',
+  'DomSnapshotMarker',
+  'BrowserClosed',
+]);
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
   if (!args.sessionId || !args.output || !args.url) {
-    throw new Error('uso: node index.js --session-id <id> --output <path> --url <url> [--browser chromium] [--headless]');
+    throw new Error(
+      'uso: node index.js --session-id <id> --output <path> --url <url> [--browser chromium] [--headless] [--event-type NetworkRequest]'
+    );
   }
 
   const emitter = createEmitter({
     sessionId: args.sessionId,
     outputPath: args.output,
+    allowedEventTypes: args.eventTypes,
   });
 
   const state = createCollectorState();
@@ -142,6 +157,11 @@ async function main() {
     browser: args.browser || 'chromium',
     url: args.url,
   });
+  if (args.eventTypes.length > 0) {
+    emitter.status('event_type_filter_enabled', {
+      event_types: args.eventTypes,
+    });
+  }
   emitter.status('browser_opened');
 
   try {
@@ -178,6 +198,7 @@ function parseArgs(argv) {
   const args = {
     browser: 'chromium',
     headless: false,
+    eventTypes: [],
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -196,10 +217,51 @@ function parseArgs(argv) {
       i += 1;
     } else if (token === '--headless') {
       args.headless = true;
+    } else if (token === '--event-type') {
+      args.eventTypes.push(argv[i + 1]);
+      i += 1;
+    } else if (token === '--event-types') {
+      const raw = String(argv[i + 1] || '');
+      raw
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .forEach((eventType) => args.eventTypes.push(eventType));
+      i += 1;
     }
   }
 
+  args.eventTypes = normalizeRequestedEventTypes(args.eventTypes);
+
   return args;
+}
+
+function normalizeRequestedEventTypes(rawEventTypes) {
+  if (!Array.isArray(rawEventTypes) || rawEventTypes.length === 0) {
+    return [];
+  }
+
+  const unique = [];
+  const seen = new Set();
+  for (const rawEventType of rawEventTypes) {
+    const eventType = String(rawEventType || '').trim();
+    if (!eventType) {
+      continue;
+    }
+
+    if (!KNOWN_EVENT_TYPES.has(eventType)) {
+      throw new Error(
+        `event-type inválido: ${eventType}. Valores válidos: ${Array.from(KNOWN_EVENT_TYPES).join(', ')}`
+      );
+    }
+
+    if (!seen.has(eventType)) {
+      seen.add(eventType);
+      unique.push(eventType);
+    }
+  }
+
+  return unique;
 }
 
 function resolveBrowser(browser) {

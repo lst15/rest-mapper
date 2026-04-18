@@ -21,6 +21,10 @@ cd ..
 # captura completa: abre browser, navegue e pressione Enter no terminal
 cargo run -- record --url http://localhost:3000
 
+# captura apenas tipos específicos no raw_trace (repita --event-type ou use CSV)
+cargo run -- record --url http://localhost:3000 --event-type NetworkRequest --event-type NetworkResponse
+cargo run -- record --url http://localhost:3000 --event-type NetworkRequest,NetworkResponse
+
 # correlação offline a partir de um raw_trace.jsonl
 cargo run -- analyze --input reports/<session_id>/raw_trace.jsonl
 
@@ -36,3 +40,15 @@ cargo run -- open --session <session_id>
 - `reports/<session_id>/raw_trace.jsonl`
 - `reports/<session_id>/correlated_trace.json`
 - `reports/<session_id>/index.html`
+
+## Tipos de evento suportados em `--event-type`
+
+- `BrowserOpened`
+- `PageNavigated`
+- `RouteChanged`
+- `UserAction`
+- `NetworkRequest`
+- `NetworkResponse`
+- `ConsoleLog`
+- `DomSnapshotMarker`
+- `BrowserClosed`
