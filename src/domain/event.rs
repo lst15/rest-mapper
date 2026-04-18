@@ -85,6 +85,12 @@ pub struct NetworkRequestEvent {
     pub resource_type: Option<String>,
     pub headers: Vec<(String, String)>,
     pub post_data: Option<String>,
+    #[serde(default)]
+    pub post_data_encoding: Option<String>,
+    #[serde(default)]
+    pub post_data_size_bytes: Option<usize>,
+    #[serde(default)]
+    pub post_data_truncated: bool,
     pub initiator_hint: Option<InitiatorHint>,
     #[serde(default)]
     pub classification: RequestClassification,
@@ -96,6 +102,16 @@ pub struct NetworkResponseEvent {
     pub status: u16,
     pub url: String,
     pub headers: Vec<(String, String)>,
+    #[serde(default)]
+    pub body: Option<String>,
+    #[serde(default)]
+    pub body_encoding: Option<String>,
+    #[serde(default)]
+    pub body_size_bytes: Option<usize>,
+    #[serde(default)]
+    pub body_truncated: bool,
+    #[serde(default)]
+    pub body_capture_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

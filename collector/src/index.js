@@ -21,6 +21,16 @@ const KNOWN_EVENT_TYPES = new Set([
   'BrowserClosed',
 ]);
 
+const MAX_CAPTURE_BYTES = Number.parseInt(process.env.FLOWTRACE_MAX_CAPTURE_BYTES || '', 10) || 16 * 1024;
+const TEXTUAL_CONTENT_TYPE_HINTS = [
+  'application/json',
+  'application/xml',
+  'application/javascript',
+  'application/x-www-form-urlencoded',
+  'application/graphql',
+  'text/',
+];
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
@@ -113,6 +123,10 @@ async function main() {
     const ts = nowUnixMs();
     const requestId = crypto.randomUUID();
     requestIdByRequest.set(request, requestId);
+    const headers = Object.entries(request.headers() || {});
+    const contentType = headerValue(headers, 'content-type');
+    const postDataBuffer = request.postDataBuffer();
+    const serializedPostData = serializeBufferPayload(postDataBuffer, contentType);
 
     const hint = matchInitiatorHint({
       state,
@@ -128,8 +142,11 @@ async function main() {
       method: request.method(),
       url: request.url(),
       resource_type: request.resourceType(),
-      headers: Object.entries(request.headers() || {}),
-      post_data: request.postData() || null,
+      headers,
+      post_data: serializedPostData.value,
+      post_data_encoding: serializedPostData.encoding,
+      post_data_size_bytes: serializedPostData.sizeBytes,
+      post_data_truncated: serializedPostData.truncated,
       initiator_hint: hint
         ? {
             source_type: hint.sourceType,
@@ -144,12 +161,31 @@ async function main() {
   page.on('response', async (response) => {
     const request = response.request();
     const requestId = requestIdByRequest.get(request) || crypto.randomUUID();
+    const headers = Object.entries(response.headers() || {});
+    const contentType = headerValue(headers, 'content-type');
+    const shouldCaptureBody =
+      isTextualContentType(contentType) || ['xhr', 'fetch', 'document'].includes(request.resourceType());
+    let serializedBody = emptySerializedPayload();
+    let bodyCaptureError = null;
+
+    if (shouldCaptureBody) {
+      try {
+        serializedBody = serializeBufferPayload(await response.body(), contentType);
+      } catch (error) {
+        bodyCaptureError = String(error && error.message ? error.message : error);
+      }
+    }
 
     emitter.emitTrace('NetworkResponse', {
       request_id: requestId,
       status: response.status(),
       url: response.url(),
-      headers: Object.entries(response.headers() || {}),
+      headers,
+      body: serializedBody.value,
+      body_encoding: serializedBody.encoding,
+      body_size_bytes: serializedBody.sizeBytes,
+      body_truncated: serializedBody.truncated,
+      body_capture_error: bodyCaptureError,
     });
   });
 
@@ -283,6 +319,50 @@ function safeRouteFromUrl(url) {
   } catch {
     return url || null;
   }
+}
+
+function emptySerializedPayload() {
+  return {
+    value: null,
+    encoding: null,
+    sizeBytes: null,
+    truncated: false,
+  };
+}
+
+function headerValue(headers, targetName) {
+  for (const [key, value] of headers || []) {
+    if (String(key || '').toLowerCase() === String(targetName || '').toLowerCase()) {
+      return String(value || '');
+    }
+  }
+  return null;
+}
+
+function isTextualContentType(contentType) {
+  const normalized = String(contentType || '').toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return TEXTUAL_CONTENT_TYPE_HINTS.some((hint) => normalized.includes(hint));
+}
+
+function serializeBufferPayload(buffer, contentType) {
+  if (!buffer || buffer.length === 0) {
+    return emptySerializedPayload();
+  }
+
+  const sizeBytes = buffer.length;
+  const truncated = sizeBytes > MAX_CAPTURE_BYTES;
+  const capped = truncated ? buffer.subarray(0, MAX_CAPTURE_BYTES) : buffer;
+  const textual = isTextualContentType(contentType);
+
+  return {
+    value: textual ? capped.toString('utf8') : capped.toString('base64'),
+    encoding: textual ? 'utf8' : 'base64',
+    sizeBytes,
+    truncated,
+  };
 }
 
 main().catch((error) => {
