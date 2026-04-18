@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::domain::{
-    event::{RequestClassification, UserActionType},
+    event::{NetworkRequestEvent, NetworkResponseEvent, RequestClassification, UserActionType},
     graph::TraceGraph,
 };
 
@@ -33,9 +34,35 @@ pub struct RequestCorrelation {
     pub request_id: String,
     pub method: String,
     pub request_url: String,
+    #[serde(default)]
+    pub request_event: Option<NetworkRequestEvent>,
+    #[serde(default)]
+    pub request_payload: Option<String>,
+    #[serde(default)]
+    pub request_payload_encoding: Option<String>,
+    #[serde(default)]
+    pub request_payload_size_bytes: Option<usize>,
+    #[serde(default)]
+    pub request_payload_truncated: bool,
     pub route: Option<String>,
     pub endpoint: String,
     pub request_ts_unix_ms: i64,
+    #[serde(default)]
+    pub response_event: Option<NetworkResponseEvent>,
+    #[serde(default)]
+    pub response_status: Option<u16>,
+    #[serde(default)]
+    pub response_url: Option<String>,
+    #[serde(default)]
+    pub response_body: Option<String>,
+    #[serde(default)]
+    pub response_body_encoding: Option<String>,
+    #[serde(default)]
+    pub response_body_size_bytes: Option<usize>,
+    #[serde(default)]
+    pub response_body_truncated: bool,
+    #[serde(default)]
+    pub response_body_capture_error: Option<String>,
     pub classification: RequestClassification,
     pub action_id: Option<String>,
     pub action_type: Option<UserActionType>,
@@ -65,4 +92,6 @@ pub struct TimelineItem {
     pub action_id: Option<String>,
     pub request_id: Option<String>,
     pub description: String,
+    #[serde(default)]
+    pub raw_event: Option<Value>,
 }

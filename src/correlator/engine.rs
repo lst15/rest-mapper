@@ -82,7 +82,14 @@ impl CorrelatorEngine {
             event: crate::domain::event::NetworkRequestEvent,
         }
 
+        #[derive(Debug, Clone)]
+        struct ResponseRecord {
+            event: crate::domain::event::NetworkResponseEvent,
+        }
+
         let mut requests: Vec<RequestRecord> = Vec::new();
+        let mut response_by_request_id: HashMap<String, ResponseRecord> = HashMap::new();
+        let mut request_route_by_id: HashMap<String, Option<String>> = HashMap::new();
 
         for envelope in &ordered {
             match &envelope.event {
@@ -95,6 +102,7 @@ impl CorrelatorEngine {
                         action_id: None,
                         request_id: None,
                         description: format!("Browser {} aberto", evt.browser),
+                        raw_event: Some(raw_event_model(&envelope.event)),
                     });
                 }
                 TraceEvent::PageNavigated(evt) => {
@@ -106,6 +114,7 @@ impl CorrelatorEngine {
                         action_id: None,
                         request_id: None,
                         description: format!("Navegação para {}", evt.to_url),
+                        raw_event: Some(raw_event_model(&envelope.event)),
                     });
                 }
                 TraceEvent::RouteChanged(evt) => {
@@ -117,6 +126,7 @@ impl CorrelatorEngine {
                         action_id: None,
                         request_id: None,
                         description: format!("Rota alterada para {}", evt.to_url),
+                        raw_event: Some(raw_event_model(&envelope.event)),
                     });
                 }
                 TraceEvent::UserAction(evt) => {
@@ -131,6 +141,7 @@ impl CorrelatorEngine {
                         action_id: Some(evt.action_id.clone()),
                         request_id: None,
                         description: format!("Ação {:?}", evt.action_type),
+                        raw_event: Some(raw_event_model(&envelope.event)),
                     });
                 }
                 TraceEvent::NetworkRequest(evt) => {
@@ -139,17 +150,40 @@ impl CorrelatorEngine {
                         event.classification = heuristics::classify_request(&event);
                     }
 
+                    let route = event.route.clone().or_else(|| Some(event.page_url.clone()));
+
                     requests.push(RequestRecord {
                         ts_unix_ms: envelope.ts_unix_ms,
                         event: event.clone(),
                     });
+                    request_route_by_id.insert(event.request_id.clone(), route.clone());
                     timeline.push(TimelineItem {
                         ts_unix_ms: envelope.ts_unix_ms,
                         event_type: "NetworkRequest".to_string(),
-                        route: event.route.clone().or_else(|| Some(event.page_url.clone())),
+                        route,
                         action_id: None,
                         request_id: Some(event.request_id.clone()),
                         description: format!("{} {}", event.method, event.url),
+                        raw_event: Some(raw_event_model(&envelope.event)),
+                    });
+                }
+                TraceEvent::NetworkResponse(evt) => {
+                    response_by_request_id.insert(
+                        evt.request_id.clone(),
+                        ResponseRecord { event: evt.clone() },
+                    );
+
+                    timeline.push(TimelineItem {
+                        ts_unix_ms: envelope.ts_unix_ms,
+                        event_type: "NetworkResponse".to_string(),
+                        route: request_route_by_id
+                            .get(&evt.request_id)
+                            .cloned()
+                            .unwrap_or(None),
+                        action_id: None,
+                        request_id: Some(evt.request_id.clone()),
+                        description: format!("{} {}", evt.status, evt.url),
+                        raw_event: Some(raw_event_model(&envelope.event)),
                     });
                 }
                 _ => {
@@ -160,6 +194,7 @@ impl CorrelatorEngine {
                         action_id: None,
                         request_id: None,
                         description: format_event_type(&envelope.event),
+                        raw_event: Some(raw_event_model(&envelope.event)),
                     });
                 }
             }
@@ -202,6 +237,11 @@ impl CorrelatorEngine {
                 request_id: request.event.request_id.clone(),
                 method: request.event.method.clone(),
                 request_url: request.event.url.clone(),
+                request_event: Some(request.event.clone()),
+                request_payload: request.event.post_data.clone(),
+                request_payload_encoding: request.event.post_data_encoding.clone(),
+                request_payload_size_bytes: request.event.post_data_size_bytes,
+                request_payload_truncated: request.event.post_data_truncated,
                 route: request
                     .event
                     .route
@@ -209,12 +249,31 @@ impl CorrelatorEngine {
                     .or_else(|| Some(request.event.page_url.clone())),
                 endpoint,
                 request_ts_unix_ms: request.ts_unix_ms,
+                response_event: None,
+                response_status: None,
+                response_url: None,
+                response_body: None,
+                response_body_encoding: None,
+                response_body_size_bytes: None,
+                response_body_truncated: false,
+                response_body_capture_error: None,
                 classification: request.event.classification,
                 action_id: None,
                 action_type: None,
                 confidence: 0.0,
                 evidence: vec!["sem associação forte com ação explícita".to_string()],
             };
+
+            if let Some(response) = response_by_request_id.get(&request.event.request_id) {
+                correlation.response_event = Some(response.event.clone());
+                correlation.response_status = Some(response.event.status);
+                correlation.response_url = Some(response.event.url.clone());
+                correlation.response_body = response.event.body.clone();
+                correlation.response_body_encoding = response.event.body_encoding.clone();
+                correlation.response_body_size_bytes = response.event.body_size_bytes;
+                correlation.response_body_truncated = response.event.body_truncated;
+                correlation.response_body_capture_error = response.event.body_capture_error.clone();
+            }
 
             if let Some((action_idx, base_score, mut evidence)) = best
                 && base_score >= self.config.min_score
@@ -432,6 +491,10 @@ fn build_graph(actions: &[ActionRecord], correlations: &[RequestCorrelation]) ->
     }
 
     graph
+}
+
+fn raw_event_model(event: &TraceEvent) -> serde_json::Value {
+    serde_json::to_value(event).unwrap_or(serde_json::Value::Null)
 }
 
 fn add_node(graph: &mut TraceGraph, seen: &mut HashSet<String>, id: String, node: TraceNode) {

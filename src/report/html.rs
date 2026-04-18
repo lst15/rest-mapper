@@ -41,6 +41,7 @@ pub fn write_html_report(path: &Path, correlated: &CorrelatedTrace) -> Result<()
     table {{ width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; }}
     th, td {{ border-bottom: 1px solid #e5e7eb; text-align: left; padding: 8px; font-size: 13px; }}
     th {{ background: #eef2ff; }}
+    td code {{ display: inline-block; max-width: 520px; white-space: pre-wrap; word-break: break-word; }}
     ul {{ padding-left: 20px; }}
     .section {{ margin-top: 24px; }}
     .muted {{ color: #6b7280; }}
@@ -68,7 +69,7 @@ pub fn write_html_report(path: &Path, correlated: &CorrelatedTrace) -> Result<()
     <table>
       <thead>
         <tr>
-          <th>Timestamp</th><th>Evento</th><th>Rota</th><th>Ação</th><th>Request</th><th>Descrição</th>
+          <th>Timestamp</th><th>Evento</th><th>Rota</th><th>Ação</th><th>Request</th><th>Descrição</th><th>Modelo raw_trace</th>
         </tr>
       </thead>
       <tbody>{timeline_rows}</tbody>
